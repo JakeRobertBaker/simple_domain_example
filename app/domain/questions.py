@@ -1,7 +1,9 @@
 from enum import Enum
 from abc import ABC, abstractmethod
+from collections import UserDict
 
 from app.domain.exceptions import (
+    QuestionError,
     QuestionIrrelevantParams,
     QuestionMissingParams,
     QuestionParamError,
@@ -49,6 +51,32 @@ class Params(ABC):
         pass
 
 
+class RegistryDict(UserDict):
+    """Registry keyed by topic_name, prevents overwrites."""
+
+    def __setitem__(self, key: str, question: type["Question"]):
+        """Add a question class to the registry."""
+        # Construct expected key from question's topic and name
+        expected_key = f"{question.topic.value}_{question.__name__}"
+
+        # Validate key format
+        if key != expected_key:
+            raise ValueError(
+                f"Registry key '{key}' must match format "
+                f"'topic_classname': expected '{expected_key}'"
+            )
+
+        # Check if this key already exists (prevent overwrite)
+        if key in self.data:
+            raise QuestionError(
+                f"Cannot register {question.__name__}: a question with topic "
+                f"'{question.topic.value}' and name '{question.__name__}' "
+                f"is already registered"
+            )
+
+        self.data[key] = question
+
+
 class Topic(Enum):
     CALCULUS = "calculus"
     ALGEBRA = "algebra"
@@ -58,7 +86,7 @@ class Topic(Enum):
 
 class Question(ABC):
     topic: Topic
-    _registry: dict[str, type["Question"]] = {}
+    _registry: RegistryDict = RegistryDict()
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -72,18 +100,19 @@ class Question(ABC):
                     f"{cls.__name__}.topic must be a Topic enum, got {type(cls.topic)}"
                 )
 
-            # Register the question class
-            cls._registry[cls.__name__] = cls
+            # Register the question class with topic_name key
+            cls._registry[f"{cls.topic.value}_{cls.__name__}"] = cls
 
     @classmethod
-    def get_question_class(cls, name: str) -> type["Question"]:
-        """Get a question class by name from the registry"""
-        return cls._registry[name]
+    def get_question_class(cls, topic: Topic, name: str) -> type["Question"]:
+        """Get a question class by topic and name from the registry"""
+        key = f"{topic.value}_{name}"
+        return cls._registry[key]
 
     @classmethod
     def get_all_questions(cls) -> dict[str, type["Question"]]:
         """Get all registered question classes"""
-        return cls._registry.copy()
+        return dict(cls._registry)
 
     def __init__(self, params: dict | None = None):
         self._internal_setup(params)
