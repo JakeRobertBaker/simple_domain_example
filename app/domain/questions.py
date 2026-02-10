@@ -58,12 +58,38 @@ class Topic(Enum):
 
 class Question(ABC):
     topic: Topic
+    _registry: dict[str, type["Question"]] = {}
 
-    def __init__(self, params: dict):
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # Only process concrete classes
+        if not hasattr(cls, "__abstractmethods__") or not cls.__abstractmethods__:
+            # Validate topic
+            if not hasattr(cls, "topic"):
+                raise TypeError(f"{cls.__name__} must define a 'topic' class variable")
+            if not isinstance(cls.topic, Topic):
+                raise TypeError(
+                    f"{cls.__name__}.topic must be a Topic enum, got {type(cls.topic)}"
+                )
+
+            # Register the question class
+            cls._registry[cls.__name__] = cls
+
+    @classmethod
+    def get_question_class(cls, name: str) -> type["Question"]:
+        """Get a question class by name from the registry"""
+        return cls._registry[name]
+
+    @classmethod
+    def get_all_questions(cls) -> dict[str, type["Question"]]:
+        """Get all registered question classes"""
+        return cls._registry.copy()
+
+    def __init__(self, params: dict | None = None):
         self._internal_setup(params)
 
     @abstractmethod
-    def _internal_setup(self, params: dict):
+    def _internal_setup(self, params: dict | None = None):
         pass
 
 
@@ -86,6 +112,6 @@ class ExampleParams(Params):
 class Example(Question):
     topic = Topic.NUMBER_THEORY
 
-    def _internal_setup(self, params: dict):
+    def _internal_setup(self, params: dict | None = None):
         self.params = ExampleParams(params)
         self.y = self.params.m + self.params.n
