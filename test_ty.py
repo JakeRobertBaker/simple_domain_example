@@ -1,7 +1,7 @@
 class ExampleParams:
-    def __initt__(self):
+    def __init__(self):
         self.m = 1
-        self.n = int(2)
+        self.n: int = int(2)
 
 
 ExampleParams().n

@@ -70,13 +70,13 @@ class Question(ABC):
 class ExampleParams(Params):
     def _validate(self, params: ParamsDict) -> None:
         # can have very simple parameterisation
-        self.m = validate_int(params.get("m"))
+        self.m: int = validate_int(params.get("m"))
         # we may have some strange validation logic
         n = validate_int(params.get("n"))
         # m cannot divide m and vice versa
         if not (n % self.m != 0) and (self.m % n == 0):
             raise QuestionParamError("n and m cannt divide one another")
-        self.n = n
+        self.n: int = n
 
     def _generate(self):
         self.m = 75
