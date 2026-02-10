@@ -1,6 +1,7 @@
+from __future__ import annotations
+
 from enum import Enum
 from abc import ABC, abstractmethod
-from collections import UserDict
 
 from app.domain.exceptions import (
     QuestionError,
@@ -47,34 +48,8 @@ class Params(ABC):
 
     @abstractmethod
     def _generate(self):
-        """Generate params."""
+        """Generate p/Toparams."""
         pass
-
-
-class RegistryDict(UserDict):
-    """Registry keyed by topic_name, prevents overwrites."""
-
-    def __setitem__(self, key: str, question: type["Question"]):
-        """Add a question class to the registry."""
-        # Construct expected key from question's topic and name
-        expected_key = f"{question.topic.value}_{question.__name__}"
-
-        # Validate key format
-        if key != expected_key:
-            raise ValueError(
-                f"Registry key '{key}' must match format "
-                f"'topic_classname': expected '{expected_key}'"
-            )
-
-        # Check if this key already exists (prevent overwrite)
-        if key in self.data:
-            raise QuestionError(
-                f"Cannot register {question.__name__}: a question with topic "
-                f"'{question.topic.value}' and name '{question.__name__}' "
-                f"is already registered"
-            )
-
-        self.data[key] = question
 
 
 class Topic(Enum):
@@ -82,6 +57,34 @@ class Topic(Enum):
     ALGEBRA = "algebra"
     LINEAR_ALGEBRA = "linear_algebra"
     NUMBER_THEORY = "number_theory"
+
+
+class RegistryDict:
+    """Registry keyed by (topic, name), prevents overwrites."""
+
+    def __init__(self):
+        self._data: dict[Topic, dict[str, type[Question]]] = {t: {} for t in Topic}
+
+    def add(self, question_cls: type[Question]):
+        if not (isinstance(question_cls, type) and issubclass(question_cls, Question)):
+            raise QuestionError("Registry can only add Question subclasses")
+        topic = question_cls.topic
+        name = question_cls.__name__
+        if name in self._data[topic]:
+            raise QuestionError(
+                f"Registry already contains Question '{name}' for topic '{topic.value}'"
+            )
+        self._data[topic][name] = question_cls
+
+    def get(self, topic: Topic, name: str) -> type[Question]:
+        if name not in self._data[topic]:
+            raise QuestionError(
+                f"No question '{name}' found for topic '{topic.value}'"
+            )
+        return self._data[topic][name]
+
+    def get_all(self) -> dict[Topic, dict[str, type[Question]]]:
+        return {topic: dict(questions) for topic, questions in self._data.items()}
 
 
 class Question(ABC):
@@ -100,19 +103,15 @@ class Question(ABC):
                     f"{cls.__name__}.topic must be a Topic enum, got {type(cls.topic)}"
                 )
 
-            # Register the question class with topic_name key
-            cls._registry[f"{cls.topic.value}_{cls.__name__}"] = cls
+            cls._registry.add(cls)
 
     @classmethod
-    def get_question_class(cls, topic: Topic, name: str) -> type["Question"]:
-        """Get a question class by topic and name from the registry"""
-        key = f"{topic.value}_{name}"
-        return cls._registry[key]
+    def get_question_class(cls, topic: Topic, name: str) -> type[Question]:
+        return cls._registry.get(topic, name)
 
     @classmethod
-    def get_all_questions(cls) -> dict[str, type["Question"]]:
-        """Get all registered question classes"""
-        return dict(cls._registry)
+    def get_all_questions(cls) -> dict[Topic, dict[str, type[Question]]]:
+        return cls._registry.get_all()
 
     def __init__(self, params: dict | None = None):
         self._internal_setup(params)
